@@ -3,10 +3,12 @@ import { Heart, MessageCircle, Share2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
 import { useState, useRef } from 'react';
+import { useRouter } from 'expo-router';
 import type { Post } from '@/mocks/posts';
 
 export default function HubScreen() {
   const { posts, toggleLike, addComment, updateChips } = useApp();
+  const router = useRouter();
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({});
   const [showComments, setShowComments] = useState<{ [key: string]: boolean }>({});
   const postButtonRefs = useRef<{ [key: string]: View | null }>({});
@@ -41,13 +43,17 @@ export default function HubScreen() {
 
   const renderPost = ({ item }: { item: Post }) => (
     <View style={styles.postCard}>
-      <View style={styles.postHeader}>
+      <TouchableOpacity 
+        style={styles.postHeader}
+        onPress={() => router.push(`/profile/${item.userId}` as any)}
+        activeOpacity={0.7}
+      >
         <Image source={{ uri: item.userAvatar }} style={styles.userAvatar} />
         <View style={styles.userInfo}>
           <Text style={styles.userName}>{item.userName}</Text>
           <Text style={styles.timestamp}>{formatTimestamp(item.timestamp)}</Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       <Text style={styles.postContent}>{item.content}</Text>
 

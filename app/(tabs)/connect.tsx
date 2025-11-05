@@ -11,6 +11,7 @@ import {
 import { Search, UserPlus, MessageCircle, Users, Plus, Eye, UserMinus } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { friends as mockFriends, suggestedFriends as mockSuggested, type Friend } from '@/mocks/friends';
 import { useFirebase } from '@/contexts/FirebaseContext';
 import ChatScreen from '@/components/ChatScreen';
@@ -21,6 +22,7 @@ type ViewMode = 'friends' | 'messages';
 
 export default function ConnectScreen() {
   const firebaseContext = useFirebase();
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>('friends');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [friends, setFriends] = useState<Friend[]>(mockFriends);
@@ -151,17 +153,23 @@ export default function ConnectScreen() {
             {filteredFriends.length > 0 ? (
               filteredFriends.map(friend => (
                 <View key={friend.id} style={styles.friendCard}>
-                  <Image source={{ uri: friend.avatar }} style={styles.avatar} />
-                  <View style={styles.friendInfo}>
-                    <Text style={styles.friendName}>{friend.name}</Text>
-                    <Text style={styles.friendUsername}>{friend.username}</Text>
-                    <View style={styles.chipsContainer}>
-                      <Text style={styles.chipsText}>{friend.chips.toLocaleString()} chips</Text>
-                      {friend.lastActive && (
-                        <Text style={styles.lastActiveText}>• {friend.lastActive}</Text>
-                      )}
+                  <TouchableOpacity
+                    style={styles.friendCardContent}
+                    onPress={() => router.push(`/profile/${friend.id}` as any)}
+                    activeOpacity={0.7}
+                  >
+                    <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>{friend.name}</Text>
+                      <Text style={styles.friendUsername}>{friend.username}</Text>
+                      <View style={styles.chipsContainer}>
+                        <Text style={styles.chipsText}>{friend.chips.toLocaleString()} chips</Text>
+                        {friend.lastActive && (
+                          <Text style={styles.lastActiveText}>• {friend.lastActive}</Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                   <View style={styles.actionButtons}>
                     <TouchableOpacity style={styles.messageButton}>
                       <MessageCircle size={18} color={Colors.gold} />
@@ -195,17 +203,23 @@ export default function ConnectScreen() {
             {filteredSuggested.length > 0 ? (
               filteredSuggested.map(friend => (
                 <View key={friend.id} style={styles.friendCard}>
-                  <Image source={{ uri: friend.avatar }} style={styles.avatar} />
-                  <View style={styles.friendInfo}>
-                    <Text style={styles.friendName}>{friend.name}</Text>
-                    <Text style={styles.friendUsername}>{friend.username}</Text>
-                    <View style={styles.chipsContainer}>
-                      <Text style={styles.chipsText}>{friend.chips.toLocaleString()} chips</Text>
-                      {friend.mutualFriends && (
-                        <Text style={styles.mutualText}>• {friend.mutualFriends} mutual</Text>
-                      )}
+                  <TouchableOpacity
+                    style={styles.friendCardContent}
+                    onPress={() => router.push(`/profile/${friend.id}` as any)}
+                    activeOpacity={0.7}
+                  >
+                    <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>{friend.name}</Text>
+                      <Text style={styles.friendUsername}>{friend.username}</Text>
+                      <View style={styles.chipsContainer}>
+                        <Text style={styles.chipsText}>{friend.chips.toLocaleString()} chips</Text>
+                        {friend.mutualFriends && (
+                          <Text style={styles.mutualText}>• {friend.mutualFriends} mutual</Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                   <View style={styles.actionButtons}>
                     <TouchableOpacity style={styles.viewButton}>
                       <Eye size={18} color={Colors.textSecondary} />
@@ -462,6 +476,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 3,
+  },
+  friendCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   avatar: {
     width: 56,
