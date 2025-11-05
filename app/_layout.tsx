@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider } from "@/contexts/AppContext";
 import { FirebaseProvider } from "@/contexts/FirebaseContext";
+import { PostsProvider } from "@/contexts/PostsContext";
 import CoinAnimationOverlay from "@/components/CoinAnimationOverlay";
 
 SplashScreen.preventAutoHideAsync();
@@ -29,12 +30,14 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <FirebaseProvider>
-          <AppProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <RootLayoutNav />
-              <CoinAnimationOverlay />
-            </GestureHandlerRootView>
-          </AppProvider>
+          <PostsProvider>
+            <AppProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <RootLayoutNav />
+                <CoinAnimationOverlay />
+              </GestureHandlerRootView>
+            </AppProvider>
+          </PostsProvider>
         </FirebaseProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

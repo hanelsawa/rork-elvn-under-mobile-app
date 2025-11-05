@@ -2,9 +2,76 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'rea
 import { Trophy, Award, Users, Calendar, TrendingUp, Target } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
+import { useState, useCallback } from 'react';
+import PostGrid from '@/components/profile/PostGrid';
+import { ProfilePost } from '@/components/profile/PostCard';
+
+type TabType = 'overview' | 'posts';
 
 export default function ProfileScreen() {
   const { user } = useApp();
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  
+  const [posts] = useState<ProfilePost[]>([
+    {
+      id: 'p1',
+      authorId: user.id,
+      type: 'photo',
+      mediaUrl: 'https://images.unsplash.com/photo-1587174486073-ae5e5cff23aa?w=800',
+      caption: 'Perfect day at Royal Melbourne! Shot my personal best today 🏌️‍♂️⛳',
+      createdAt: new Date(),
+      likesCount: 234,
+      commentsCount: 12,
+      visibility: 'public',
+    },
+    {
+      id: 'p2',
+      authorId: user.id,
+      type: 'photo',
+      mediaUrl: 'https://images.unsplash.com/photo-1592919505780-303950717480?w=800',
+      caption: 'Sunrise rounds hit different ☀️',
+      createdAt: new Date(Date.now() - 86400000),
+      likesCount: 412,
+      commentsCount: 28,
+      visibility: 'public',
+    },
+    {
+      id: 'p3',
+      authorId: user.id,
+      type: 'text',
+      caption: 'Finally broke 80! All the practice is paying off 💪',
+      createdAt: new Date(Date.now() - 172800000),
+      likesCount: 298,
+      commentsCount: 45,
+      visibility: 'public',
+    },
+    {
+      id: 'p4',
+      authorId: user.id,
+      type: 'video',
+      mediaUrl: 'https://images.unsplash.com/photo-1530028828-25e8270e8c4d?w=800',
+      caption: 'New clubs just arrived! Testing them out 🎯',
+      createdAt: new Date(Date.now() - 259200000),
+      likesCount: 189,
+      commentsCount: 34,
+      visibility: 'public',
+    },
+  ]);
+
+  const [loading] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [hasMore] = useState<boolean>(false);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  }, []);
+
+  const handleLoadMore = useCallback(() => {
+    console.log('Loading more posts...');
+  }, []);
 
   const getBadgeIcon = (iconName: string) => {
     switch (iconName) {
@@ -24,7 +91,7 @@ export default function ProfileScreen() {
   );
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <View style={styles.header}>
         <Image source={{ uri: user.avatar }} style={styles.avatar} />
         <Text style={styles.name}>{user.name}</Text>
@@ -39,10 +106,13 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{user.stats.posts}</Text>
+        <TouchableOpacity 
+          style={styles.statItem}
+          onPress={() => setActiveTab('posts')}
+        >
+          <Text style={styles.statValue}>{posts.length}</Text>
           <Text style={styles.statLabel}>Posts</Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{user.stats.followers.toLocaleString()}</Text>
@@ -55,66 +125,118 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Achievements</Text>
-        <View style={styles.badgesContainer}>
-          {user.badges.map(badge => {
-            const IconComponent = getBadgeIcon(badge.icon);
-            return (
-              <View key={badge.id} style={[styles.badge, { borderColor: badge.color }]}>
-                <View style={[styles.badgeIcon, { backgroundColor: badge.color + '20' }]}>
-                  <IconComponent size={24} color={badge.color} />
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'overview' && styles.tabActive,
+          ]}
+          onPress={() => setActiveTab('overview')}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'overview' && styles.tabTextActive,
+            ]}
+          >
+            Overview
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'posts' && styles.tabActive,
+          ]}
+          onPress={() => setActiveTab('posts')}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'posts' && styles.tabTextActive,
+            ]}
+          >
+            Posts
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'overview' ? (
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Achievements</Text>
+            <View style={styles.badgesContainer}>
+              {user.badges.map(badge => {
+                const IconComponent = getBadgeIcon(badge.icon);
+                return (
+                  <View key={badge.id} style={[styles.badge, { borderColor: badge.color }]}>
+                    <View style={[styles.badgeIcon, { backgroundColor: badge.color + '20' }]}>
+                      <IconComponent size={24} color={badge.color} />
+                    </View>
+                    <Text style={styles.badgeName}>{badge.name}</Text>
+                    <Text style={styles.badgeDate}>
+                      {new Date(badge.earnedDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Golf Stats</Text>
+            <View style={styles.golfStatsContainer}>
+              <View style={styles.golfStatCard}>
+                <View style={styles.golfStatIcon}>
+                  <Target size={24} color={Colors.accent} />
                 </View>
-                <Text style={styles.badgeName}>{badge.name}</Text>
-                <Text style={styles.badgeDate}>
-                  {new Date(badge.earnedDate).toLocaleDateString('en-US', {
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </Text>
+                <Text style={styles.golfStatValue}>{user.stats.golfRounds}</Text>
+                <Text style={styles.golfStatLabel}>Rounds Played</Text>
               </View>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Golf Stats</Text>
-        <View style={styles.golfStatsContainer}>
-          <View style={styles.golfStatCard}>
-            <View style={styles.golfStatIcon}>
-              <Target size={24} color={Colors.accent} />
+              <View style={styles.golfStatCard}>
+                <View style={styles.golfStatIcon}>
+                  <TrendingUp size={24} color={Colors.gold} />
+                </View>
+                <Text style={styles.golfStatValue}>{user.stats.bestScore}</Text>
+                <Text style={styles.golfStatLabel}>Best Score</Text>
+              </View>
+              <View style={styles.golfStatCard}>
+                <View style={styles.golfStatIcon}>
+                  <Trophy size={24} color={Colors.error} />
+                </View>
+                <Text style={styles.golfStatValue}>{user.stats.giveawaysWon}</Text>
+                <Text style={styles.golfStatLabel}>Giveaways Won</Text>
+              </View>
             </View>
-            <Text style={styles.golfStatValue}>{user.stats.golfRounds}</Text>
-            <Text style={styles.golfStatLabel}>Rounds Played</Text>
           </View>
-          <View style={styles.golfStatCard}>
-            <View style={styles.golfStatIcon}>
-              <TrendingUp size={24} color={Colors.gold} />
-            </View>
-            <Text style={styles.golfStatValue}>{user.stats.bestScore}</Text>
-            <Text style={styles.golfStatLabel}>Best Score</Text>
-          </View>
-          <View style={styles.golfStatCard}>
-            <View style={styles.golfStatIcon}>
-              <Trophy size={24} color={Colors.error} />
-            </View>
-            <Text style={styles.golfStatValue}>{user.stats.giveawaysWon}</Text>
-            <Text style={styles.golfStatLabel}>Giveaways Won</Text>
-          </View>
-        </View>
-      </View>
 
-      <TouchableOpacity style={styles.editButton}>
-        <Text style={styles.editButtonText}>Edit Profile</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.editButton}>
+            <Text style={styles.editButtonText}>Edit Profile</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity style={styles.settingsButton}>
-        <Text style={styles.settingsButtonText}>Settings</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.settingsButton}>
+            <Text style={styles.settingsButtonText}>Settings</Text>
+          </TouchableOpacity>
 
-      <View style={styles.bottomSpacer} />
-    </ScrollView>
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
+      ) : (
+        <PostGrid
+          posts={posts}
+          loading={loading}
+          refreshing={refreshing}
+          hasMore={hasMore}
+          onRefresh={handleRefresh}
+          onLoadMore={handleLoadMore}
+        />
+      )}
+    </View>
   );
 }
 
@@ -122,6 +244,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 32,
   },
   header: {
     alignItems: 'center',
@@ -195,6 +323,31 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     backgroundColor: Colors.border,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: Colors.cardBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: Colors.gold,
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  tabTextActive: {
+    color: Colors.gold,
+    fontWeight: '700' as const,
   },
   section: {
     padding: 20,
