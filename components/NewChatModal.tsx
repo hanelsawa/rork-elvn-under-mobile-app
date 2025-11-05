@@ -9,9 +9,9 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { X, MessageCircle, Users as UsersIcon, Search } from 'lucide-react-native';
+import { X, MessageCircle, Users as UsersIcon, Search, AlertCircle } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useFirebase } from '@/contexts/FirebaseContext';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/config/firebase';
@@ -38,14 +38,11 @@ export default function NewChatModal({ visible, onClose, onChatCreated }: NewCha
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
 
-  useEffect(() => {
-    if (visible && mode !== 'select') {
-      loadUsers();
+  const loadUsers = useCallback(async () => {
+    if (!firebaseUser || !db) {
+      console.warn('[NewChatModal] Firebase not initialized');
+      return;
     }
-  }, [visible, mode]);
-
-  const loadUsers = async () => {
-    if (!firebaseUser || !db) return;
 
     setLoading(true);
     try {
@@ -61,7 +58,13 @@ export default function NewChatModal({ visible, onClose, onChatCreated }: NewCha
     } finally {
       setLoading(false);
     }
-  };
+  }, [firebaseUser]);
+
+  useEffect(() => {
+    if (visible && mode !== 'select') {
+      loadUsers();
+    }
+  }, [visible, mode, loadUsers]);
 
   const handleClose = () => {
     setMode('select');
@@ -73,6 +76,11 @@ export default function NewChatModal({ visible, onClose, onChatCreated }: NewCha
 
   const handleCreateChat = async () => {
     if (selectedUsers.length === 0) return;
+
+    if (!firebaseUser || !db) {
+      alert('Chat feature is not available. Please configure Firebase credentials.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -86,9 +94,12 @@ export default function NewChatModal({ visible, onClose, onChatCreated }: NewCha
         console.log('[NewChatModal] Chat created:', chatId);
         handleClose();
         onChatCreated(chatId);
+      } else {
+        alert('Failed to create chat. Please try again.');
       }
     } catch (error) {
       console.error('[NewChatModal] Error creating chat:', error);
+      alert('Failed to create chat. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -127,6 +138,35 @@ export default function NewChatModal({ visible, onClose, onChatCreated }: NewCha
       </TouchableOpacity>
     );
   };
+
+  if (!db || !firebaseUser) {
+    return (
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chat Unavailable</Text>
+              <TouchableOpacity onPress={handleClose}>
+                <X size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.errorContainer}>
+              <AlertCircle size={48} color={Colors.gold} />
+              <Text style={styles.errorTitle}>Chat Feature Not Available</Text>
+              <Text style={styles.errorMessage}>
+                Firebase is not configured. Please add your Firebase credentials to enable chat functionality.
+              </Text>
+            </View>
+
+            <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   if (mode === 'select') {
     return (
@@ -393,6 +433,35 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   createButtonText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: Colors.navy,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: Colors.textPrimary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  closeButton: {
+    backgroundColor: Colors.gold,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  closeButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.navy,
