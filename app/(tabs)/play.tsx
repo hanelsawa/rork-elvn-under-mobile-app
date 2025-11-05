@@ -13,10 +13,12 @@ import {
 } from 'react-native';
 import { Trophy, TrendingUp, Search, MapPin, X, ChevronRight, Check, Minus, Plus, Users, UserPlus } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { golfCourses, leaderboard } from '@/mocks/golf';
 import type { GolfCourse, HoleScore } from '@/mocks/golf';
+import { courseService, type VicCourse } from '@/lib/courseService';
+import { router, useFocusEffect } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 
 type Player = {
@@ -32,6 +34,8 @@ type SavedRound = {
   players: Player[];
   totalHoles: 9 | 18;
   timestamp: string;
+  vicCourse?: VicCourse;
+  selectedTee?: string;
 };
 
 export default function PlayScreen() {
@@ -49,17 +53,44 @@ export default function PlayScreen() {
   const [showPlayerSelection, setShowPlayerSelection] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [guestName, setGuestName] = useState('');
-  const [hasSavedRound, setHasSavedRound] = useState(false);
   const [submitButtonLayout, setSubmitButtonLayout] = useState({ x: 0, y: 0 });
+  const [vicCourse, setVicCourse] = useState<VicCourse | null>(null);
+  const [selectedTee, setSelectedTee] = useState<string>('');
 
   useEffect(() => {
     loadSavedRound();
   }, []);
 
+  const checkForSelectedCourse = useCallback(() => {
+    async function checkCourse() {
+      try {
+        const lastCourse = await courseService.getLastUsedCourse();
+        if (lastCourse) {
+          const course = await courseService.getCourseById(lastCourse.courseId);
+          if (course) {
+            setVicCourse(course);
+            setSelectedTee(lastCourse.teeName);
+            await courseService.clearLastUsedCourse();
+
+            if (!selectedCourse) {
+              setShowHoleSelection(true);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking for selected course:', error);
+      }
+    }
+    checkCourse();
+  }, [selectedCourse]);
+
+  useFocusEffect(checkForSelectedCourse);
+
   useEffect(() => {
-    if (showHoleTracker && holeScores.length > 0) {
+    if (showHoleTracker && holeScores.length > 0 && selectedCourse) {
       saveRoundProgress();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holeScores, showHoleTracker]);
 
   const loadSavedRound = async () => {
@@ -67,7 +98,6 @@ export default function PlayScreen() {
       const saved = await AsyncStorage.getItem('currentRound');
       if (saved) {
         const round: SavedRound = JSON.parse(saved);
-        setHasSavedRound(true);
         Alert.alert(
           'Resume Round',
           `You have a saved round at ${round.course.name}. Would you like to continue?`,
@@ -77,7 +107,6 @@ export default function PlayScreen() {
               style: 'destructive',
               onPress: () => {
                 AsyncStorage.removeItem('currentRound');
-                setHasSavedRound(false);
               },
             },
             {
@@ -87,6 +116,10 @@ export default function PlayScreen() {
                 setHoleScores(round.holeScores);
                 setPlayers(round.players);
                 setTotalHoles(round.totalHoles);
+                if (round.vicCourse) {
+                  setVicCourse(round.vicCourse);
+                  setSelectedTee(round.selectedTee || '');
+                }
                 setShowHoleTracker(true);
               },
             },
@@ -107,6 +140,8 @@ export default function PlayScreen() {
         players,
         totalHoles,
         timestamp: new Date().toISOString(),
+        vicCourse: vicCourse || undefined,
+        selectedTee: selectedTee || undefined,
       };
       await AsyncStorage.setItem('currentRound', JSON.stringify(round));
     } catch (error) {
@@ -117,7 +152,6 @@ export default function PlayScreen() {
   const clearSavedRound = async () => {
     try {
       await AsyncStorage.removeItem('currentRound');
-      setHasSavedRound(false);
     } catch (error) {
       console.log('Error clearing saved round:', error);
     }
@@ -191,20 +225,34 @@ export default function PlayScreen() {
 
   const initializeHoleScores = (course: GolfCourse) => {
     const actualHoles = totalHoles;
-    const adjustedPar = totalHoles === 9 ? Math.round(course.par / 2) : course.par;
-    const parPerHole = Math.floor(adjustedPar / actualHoles);
-    const remainder = adjustedPar % actualHoles;
-    
     const scores: HoleScore[] = [];
     const startHole = totalHoles === 9 && nineHoleType === 'back' ? 10 : 1;
-    
-    for (let i = 0; i < actualHoles; i++) {
-      scores.push({
-        hole: startHole + i,
-        par: i < remainder ? parPerHole + 1 : parPerHole,
-        score: 0,
-      });
+
+    if (vicCourse && selectedTee) {
+      const pars = courseService.getPars(vicCourse, selectedTee);
+      const startIndex = totalHoles === 9 && nineHoleType === 'back' ? 9 : 0;
+      const endIndex = totalHoles === 9 ? startIndex + 9 : 18;
+
+      for (let i = startIndex; i < endIndex; i++) {
+        scores.push({
+          hole: i + 1,
+          par: pars[i] || 4,
+          score: 0,
+        });
+      }
+    } else {
+      const parPerHole = Math.floor(course.par / actualHoles);
+      const remainder = course.par % actualHoles;
+
+      for (let i = 0; i < actualHoles; i++) {
+        scores.push({
+          hole: startHole + i,
+          par: i < remainder ? parPerHole + 1 : parPerHole,
+          score: 0,
+        });
+      }
     }
+
     setHoleScores(scores);
     setShowHoleTracker(true);
   };
@@ -220,8 +268,6 @@ export default function PlayScreen() {
   };
 
   const getScoreToPar = () => {
-    if (!selectedCourse) return 0;
-    const adjustedPar = totalHoles === 9 ? Math.round(selectedCourse.par / 2) : selectedCourse.par;
     const totalPar = holeScores.reduce((sum, hole) => sum + hole.par, 0);
     return getTotalScore() - totalPar;
   };
@@ -432,9 +478,19 @@ export default function PlayScreen() {
 
           <TouchableOpacity
             style={styles.courseSelector}
-            onPress={() => setShowCourseSelector(true)}
+            onPress={() => router.push('/scorecard/course-select')}
           >
-            {selectedCourse ? (
+            {vicCourse && selectedTee ? (
+              <View style={styles.selectedCourseInfo}>
+                <View>
+                  <Text style={styles.selectedCourseName}>{vicCourse.club}</Text>
+                  <Text style={styles.selectedCourseLocation}>
+                    {vicCourse.suburb}, {vicCourse.state} • {selectedTee}
+                  </Text>
+                </View>
+                <Text style={styles.selectedCoursePar}>Par {courseService.getTotalPar(vicCourse, selectedTee)}</Text>
+              </View>
+            ) : selectedCourse ? (
               <View style={styles.selectedCourseInfo}>
                 <View>
                   <Text style={styles.selectedCourseName}>{selectedCourse.name}</Text>
@@ -452,7 +508,7 @@ export default function PlayScreen() {
             )}
           </TouchableOpacity>
 
-          {selectedCourse && (
+          {(selectedCourse || (vicCourse && selectedTee)) && (
             <View style={styles.scorecardContainer}>
               <TouchableOpacity
                 style={styles.startRoundButton}
@@ -706,12 +762,19 @@ export default function PlayScreen() {
               <X size={24} color={Colors.textPrimary} />
             </TouchableOpacity>
             <View style={styles.trackerHeaderInfo}>
-              <Text style={styles.trackerCourseName}>{selectedCourse?.name}</Text>
+              <Text style={styles.trackerCourseName}>
+                {vicCourse ? vicCourse.club : selectedCourse?.name}
+              </Text>
               <Text style={styles.trackerCourseDetails}>
+                {vicCourse && selectedTee ? `${selectedTee} • ` : ''}
                 {totalHoles === 9 ? `${nineHoleType === 'front' ? 'Front' : 'Back'} 9` : '18 holes'} • {players.length} player{players.length !== 1 ? 's' : ''}
               </Text>
             </View>
-            <View style={{ width: 24 }} />
+            <TouchableOpacity
+              onPress={() => router.push('/scorecard/course-select')}
+            >
+              <ChevronRight size={24} color={Colors.gold} />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.scoreOverview}>
