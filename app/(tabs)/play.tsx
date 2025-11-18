@@ -902,30 +902,34 @@ export default function PlayScreen() {
                         >
                           <Minus
                             size={18}
-                            color={hole.score === 0 ? Colors.border : Colors.accent}
+                            color={hole.score === 0 ? Colors.border : Colors.gold}
                           />
                         </TouchableOpacity>
                         <TextInput
                           style={styles.scoreInputField}
                           value={hole.score === 0 ? '' : String(hole.score)}
                           onChangeText={(text) => {
-                            const num = parseInt(text, 10);
-                            if (!isNaN(num) && num > 0) {
-                              updateHoleScore(index, num);
-                            } else if (text === '') {
+                            if (text === '') {
                               updateHoleScore(index, 0);
+                              return;
+                            }
+                            const num = parseInt(text, 10);
+                            if (!isNaN(num) && num >= 0 && num <= 15) {
+                              updateHoleScore(index, num);
                             }
                           }}
-                          keyboardType="numeric"
+                          keyboardType="number-pad"
                           placeholder="-"
                           placeholderTextColor={Colors.textSecondary}
-                          textAlign="center"
+                          maxLength={2}
+                          returnKeyType="done"
+                          editable={true}
                         />
                         <TouchableOpacity
                           style={styles.scoreButtonSmall}
                           onPress={() => updateHoleScore(index, hole.score + 1)}
                         >
-                          <Plus size={18} color={Colors.accent} />
+                          <Plus size={18} color={Colors.gold} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1622,8 +1626,12 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     textAlign: 'center',
     minWidth: 60,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: Colors.border,
   },
   holeSelectionContainer: {
     padding: 24,
