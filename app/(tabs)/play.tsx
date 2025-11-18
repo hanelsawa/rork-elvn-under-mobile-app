@@ -20,6 +20,7 @@ import type { GolfCourse, HoleScore } from '@/mocks/golf';
 import { courseService, type VicCourse } from '@/lib/courseService';
 import { router, useFocusEffect } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
+import { calculateHoleScore, calculateSplit } from '@/lib/scoring';
 
 type Player = {
   id: string;
@@ -28,14 +29,19 @@ type Player = {
   isGuest: boolean;
 };
 
+type ExtendedHoleScore = HoleScore & {
+  strokeIndex?: number;
+};
+
 type SavedRound = {
   course: GolfCourse;
-  holeScores: HoleScore[];
+  holeScores: ExtendedHoleScore[];
   players: Player[];
   totalHoles: 9 | 18;
   timestamp: string;
   vicCourse?: VicCourse;
   selectedTee?: string;
+  handicap?: number;
 };
 
 export default function PlayScreen() {
@@ -45,7 +51,9 @@ export default function PlayScreen() {
   const [selectedCourse, setSelectedCourse] = useState<GolfCourse | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHoleTracker, setShowHoleTracker] = useState(false);
-  const [holeScores, setHoleScores] = useState<HoleScore[]>([]);
+  const [holeScores, setHoleScores] = useState<ExtendedHoleScore[]>([]);
+  const [handicap, setHandicap] = useState<number>(0);
+  const [showHandicapInput, setShowHandicapInput] = useState(false);
   const [showHoleSelection, setShowHoleSelection] = useState(false);
   const [totalHoles, setTotalHoles] = useState<9 | 18>(18);
   const [nineHoleType, setNineHoleType] = useState<'front' | 'back'>('front');
@@ -116,6 +124,7 @@ export default function PlayScreen() {
                 setHoleScores(round.holeScores);
                 setPlayers(round.players);
                 setTotalHoles(round.totalHoles);
+                setHandicap(round.handicap || 0);
                 if (round.vicCourse) {
                   setVicCourse(round.vicCourse);
                   setSelectedTee(round.selectedTee || '');
@@ -142,12 +151,20 @@ export default function PlayScreen() {
         timestamp: new Date().toISOString(),
         vicCourse: vicCourse || undefined,
         selectedTee: selectedTee || undefined,
+        handicap,
       };
       await AsyncStorage.setItem('currentRound', JSON.stringify(round));
     } catch (error) {
       console.log('Error saving round:', error);
     }
   };
+
+  useEffect(() => {
+    if (handicap !== undefined) {
+      saveRoundProgress();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handicap]);
 
   const clearSavedRound = async () => {
     try {
@@ -225,11 +242,13 @@ export default function PlayScreen() {
 
   const initializeHoleScores = (course: GolfCourse) => {
     const actualHoles = totalHoles;
-    const scores: HoleScore[] = [];
+    const scores: ExtendedHoleScore[] = [];
     const startHole = totalHoles === 9 && nineHoleType === 'back' ? 10 : 1;
 
     if (vicCourse && selectedTee) {
-      const pars = courseService.getPars(vicCourse, selectedTee);
+      const tee = courseService.getTee(vicCourse, selectedTee);
+      const pars = tee?.par || [];
+      const strokeIndexes = tee?.strokeIndex || [];
       const startIndex = totalHoles === 9 && nineHoleType === 'back' ? 9 : 0;
       const endIndex = totalHoles === 9 ? startIndex + 9 : 18;
 
@@ -238,6 +257,7 @@ export default function PlayScreen() {
           hole: i + 1,
           par: pars[i] || 4,
           score: 0,
+          strokeIndex: strokeIndexes[i],
         });
       }
     } else {
@@ -455,7 +475,7 @@ export default function PlayScreen() {
               </View>
 
               <View style={styles.scoreContainer}>
-                <Text style={styles.scoreValue}>{entry.score}</Text>
+                <Text style={styles.scoreValueLeaderboard}>{entry.score}</Text>
                 <Text style={styles.scoreLabel}>Score</Text>
               </View>
 
@@ -777,26 +797,58 @@ export default function PlayScreen() {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.handicapContainer}>
+            <Text style={styles.handicapLabel}>Playing Handicap</Text>
+            <View style={styles.handicapInputRow}>
+              <TouchableOpacity
+                style={styles.handicapButton}
+                onPress={() => setHandicap(Math.max(0, handicap - 1))}
+              >
+                <Minus size={20} color={Colors.gold} />
+              </TouchableOpacity>
+              <Text style={styles.handicapValue}>{handicap}</Text>
+              <TouchableOpacity
+                style={styles.handicapButton}
+                onPress={() => setHandicap(Math.min(54, handicap + 1))}
+              >
+                <Plus size={20} color={Colors.gold} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <View style={styles.scoreOverview}>
             <View style={styles.scoreOverviewItem}>
-              <Text style={styles.scoreOverviewLabel}>Total Score</Text>
+              <Text style={styles.scoreOverviewLabel}>Gross</Text>
               <Text style={styles.scoreOverviewValue}>{getTotalScore()}</Text>
             </View>
             <View style={styles.scoreOverviewDivider} />
             <View style={styles.scoreOverviewItem}>
-              <Text style={styles.scoreOverviewLabel}>To Par</Text>
-              <Text
-                style={[
-                  styles.scoreOverviewValue,
-                  getScoreToPar() < 0 && styles.underPar,
-                  getScoreToPar() > 0 && styles.overPar,
-                ]}
-              >
-                {getScoreToPar() === 0
-                  ? 'E'
-                  : getScoreToPar() > 0
-                  ? `+${getScoreToPar()}`
-                  : getScoreToPar()}
+              <Text style={styles.scoreOverviewLabel}>Net</Text>
+              <Text style={[styles.scoreOverviewValue, styles.underPar]}>
+                {(() => {
+                  const holesData = holeScores.map(h => ({
+                    par: h.par,
+                    gross: h.score,
+                    strokeIndex: h.strokeIndex || 1,
+                  }));
+                  const totals = calculateSplit(holesData, handicap);
+                  return totals.total.netTotal;
+                })()}
+              </Text>
+            </View>
+            <View style={styles.scoreOverviewDivider} />
+            <View style={styles.scoreOverviewItem}>
+              <Text style={styles.scoreOverviewLabel}>Stableford</Text>
+              <Text style={[styles.scoreOverviewValue, { color: Colors.gold }]}>
+                {(() => {
+                  const holesData = holeScores.map(h => ({
+                    par: h.par,
+                    gross: h.score,
+                    strokeIndex: h.strokeIndex || 1,
+                  }));
+                  const totals = calculateSplit(holesData, handicap);
+                  return totals.total.pointsTotal;
+                })()}
               </Text>
             </View>
           </View>
@@ -806,6 +858,12 @@ export default function PlayScreen() {
             showsVerticalScrollIndicator={false}
           >
             {holeScores.map((hole, index) => {
+              const calc = calculateHoleScore({
+                par: hole.par,
+                gross: hole.score,
+                strokeIndex: hole.strokeIndex || 1,
+                handicap,
+              });
               const scoreToPar = hole.score > 0 ? hole.score - hole.par : 0;
               return (
                 <View key={hole.hole} style={styles.holeCard}>
@@ -813,56 +871,72 @@ export default function PlayScreen() {
                     <View style={styles.holeNumberContainer}>
                       <Text style={styles.holeNumber}>Hole {hole.hole}</Text>
                       <Text style={styles.holePar}>Par {hole.par}</Text>
+                      {hole.strokeIndex && (
+                        <View style={styles.strokeIndexBadge}>
+                          <Text style={styles.strokeIndexText}>SI {hole.strokeIndex}</Text>
+                        </View>
+                      )}
                     </View>
-                    {hole.score > 0 && (
+                    {hole.score > 0 && calc.points > 0 && (
                       <View
                         style={[
                           styles.holeStatusBadge,
-                          scoreToPar === 0 && styles.parBadge,
-                          scoreToPar < 0 && styles.underParBadge,
-                          scoreToPar > 0 && styles.overParBadge,
+                          calc.points === 2 && styles.parBadge,
+                          calc.points > 2 && styles.underParBadge,
+                          calc.points < 2 && styles.overParBadge,
                         ]}
                       >
-                        <Check size={14} color={Colors.white} />
+                        <Text style={styles.pointsBadgeText}>{calc.points}</Text>
                       </View>
                     )}
                   </View>
 
-                  <View style={styles.scoreControls}>
-                    <TouchableOpacity
-                      style={styles.scoreButton}
-                      onPress={() => updateHoleScore(index, hole.score - 1)}
-                      disabled={hole.score === 0}
-                    >
-                      <Minus
-                        size={24}
-                        color={hole.score === 0 ? Colors.border : Colors.accent}
-                      />
-                    </TouchableOpacity>
-
-                    <View style={styles.scoreDisplay}>
-                      <Text style={styles.scoreDisplayValue}>
-                        {hole.score === 0 ? '-' : hole.score}
-                      </Text>
-                      {hole.score > 0 && scoreToPar !== 0 && (
-                        <Text
-                          style={[
-                            styles.scoreDisplayDiff,
-                            scoreToPar < 0 && styles.underParText,
-                            scoreToPar > 0 && styles.overParText,
-                          ]}
+                  <View style={styles.scoreRow}>
+                    <View style={styles.scoreCell}>
+                      <Text style={styles.scoreCellLabel}>Gross</Text>
+                      <View style={styles.scoreControls}>
+                        <TouchableOpacity
+                          style={styles.scoreButtonSmall}
+                          onPress={() => updateHoleScore(index, hole.score - 1)}
+                          disabled={hole.score === 0}
                         >
-                          {scoreToPar > 0 ? `+${scoreToPar}` : scoreToPar}
+                          <Minus
+                            size={18}
+                            color={hole.score === 0 ? Colors.border : Colors.accent}
+                          />
+                        </TouchableOpacity>
+                        <Text style={styles.scoreValue}>
+                          {hole.score === 0 ? '-' : hole.score}
                         </Text>
-                      )}
+                        <TouchableOpacity
+                          style={styles.scoreButtonSmall}
+                          onPress={() => updateHoleScore(index, hole.score + 1)}
+                        >
+                          <Plus size={18} color={Colors.accent} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
-                    <TouchableOpacity
-                      style={styles.scoreButton}
-                      onPress={() => updateHoleScore(index, hole.score + 1)}
-                    >
-                      <Plus size={24} color={Colors.accent} />
-                    </TouchableOpacity>
+                    {hole.strokeIndex && (
+                      <>
+                        <View style={styles.scoreCell}>
+                          <Text style={styles.scoreCellLabel}>Net</Text>
+                          <Text style={[styles.scoreValue, calc.net > 0 && styles.underPar]}>
+                            {calc.net > 0 ? calc.net : '-'}
+                          </Text>
+                          {calc.shots > 0 && hole.score > 0 && (
+                            <Text style={styles.shotsText}>({calc.shots} shot{calc.shots > 1 ? 's' : ''})</Text>
+                          )}
+                        </View>
+
+                        <View style={styles.scoreCell}>
+                          <Text style={styles.scoreCellLabel}>Points</Text>
+                          <Text style={[styles.scoreValue, { color: Colors.gold }]}>
+                            {calc.points > 0 ? calc.points : '-'}
+                          </Text>
+                        </View>
+                      </>
+                    )}
                   </View>
                 </View>
               );
@@ -1016,7 +1090,7 @@ const styles = StyleSheet.create({
   scoreContainer: {
     alignItems: 'center',
   },
-  scoreValue: {
+  scoreValueLeaderboard: {
     fontSize: 24,
     fontWeight: '700' as const,
     color: Colors.accent,
@@ -1435,6 +1509,99 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.navy,
+  },
+  handicapContainer: {
+    backgroundColor: Colors.cardBackground,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  handicapLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  handicapInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  handicapButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  handicapValue: {
+    fontSize: 32,
+    fontWeight: '700' as const,
+    color: Colors.textPrimary,
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  strokeIndexBadge: {
+    backgroundColor: Colors.lightGray,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  strokeIndexText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  pointsBadgeText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.white,
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  scoreCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  scoreCellLabel: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+  },
+  scoreValue: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: Colors.textPrimary,
+  },
+  scoreButtonSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  shotsText: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   holeSelectionContainer: {
     padding: 24,
