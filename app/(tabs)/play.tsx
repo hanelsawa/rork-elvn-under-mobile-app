@@ -234,7 +234,31 @@ export default function PlayScreen() {
     if (players.length === 0) {
       addCurrentUser();
     }
+
     setShowPlayerSelection(false);
+
+    // ✅ If a VIC course + tee is selected, use that for the round
+    if (vicCourse && selectedTee) {
+      const totalPar = courseService.getTotalPar(vicCourse, selectedTee);
+
+      const courseStub: GolfCourse = {
+        id: vicCourse.id,
+        name: vicCourse.club,
+        location: vicCourse.suburb,
+        state: vicCourse.state,
+        par: totalPar,
+        holes: 18,
+        rating: 4.5,
+        image: '',
+      };
+
+      // keep selectedCourse in sync so saving/resuming still works
+      setSelectedCourse(courseStub);
+      initializeHoleScores(courseStub);
+      return;
+    }
+
+    // 🟢 Fallback: existing behaviour for mock courses
     if (selectedCourse) {
       initializeHoleScores(selectedCourse);
     }
