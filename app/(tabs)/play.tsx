@@ -905,9 +905,22 @@ export default function PlayScreen() {
                             color={hole.score === 0 ? Colors.border : Colors.accent}
                           />
                         </TouchableOpacity>
-                        <Text style={styles.scoreValue}>
-                          {hole.score === 0 ? '-' : hole.score}
-                        </Text>
+                        <TextInput
+                          style={styles.scoreInputField}
+                          value={hole.score === 0 ? '' : String(hole.score)}
+                          onChangeText={(text) => {
+                            const num = parseInt(text, 10);
+                            if (!isNaN(num) && num > 0) {
+                              updateHoleScore(index, num);
+                            } else if (text === '') {
+                              updateHoleScore(index, 0);
+                            }
+                          }}
+                          keyboardType="numeric"
+                          placeholder="-"
+                          placeholderTextColor={Colors.textSecondary}
+                          textAlign="center"
+                        />
                         <TouchableOpacity
                           style={styles.scoreButtonSmall}
                           onPress={() => updateHoleScore(index, hole.score + 1)}
@@ -1602,6 +1615,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.textSecondary,
     marginTop: 2,
+  },
+  scoreInputField: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    minWidth: 60,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
   holeSelectionContainer: {
     padding: 24,

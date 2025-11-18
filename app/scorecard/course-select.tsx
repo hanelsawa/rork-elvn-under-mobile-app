@@ -48,8 +48,10 @@ export default function CourseSelectScreen() {
   const handleSelectTee = async (tee: TeePars) => {
     if (!selectedCourse) return;
 
+    console.log('Tee selected:', selectedCourse.club, tee.name);
     await courseService.saveLastUsedCourse(selectedCourse.id, tee.name);
-
+    
+    setShowTeeSelector(false);
     router.back();
   };
 
