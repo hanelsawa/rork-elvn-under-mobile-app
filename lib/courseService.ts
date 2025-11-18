@@ -65,6 +65,10 @@ class CourseService {
     return course.tees.find((t) => t.name === teeName) || null;
   }
 
+  getDefaultTee(course: VicCourse): TeePars {
+    return course.tees.find((t) => t.name.toLowerCase() === 'blue') || course.tees[0];
+  }
+
   async saveLastUsedCourse(courseId: string, teeName: string): Promise<void> {
     try {
       const data: SavedCourseData = {
