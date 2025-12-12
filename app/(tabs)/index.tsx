@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { Heart, MessageCircle, Share2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import type { Post } from '@/mocks/posts';
 
@@ -12,6 +12,22 @@ export default function HubScreen() {
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({});
   const [showComments, setShowComments] = useState<{ [key: string]: boolean }>({});
   const postButtonRefs = useRef<{ [key: string]: View | null }>({});
+  const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+    };
+  }, []);
 
   const handleAddComment = (postId: string) => {
     const text = commentText[postId];
@@ -133,15 +149,22 @@ export default function HubScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <FlatList
+        ref={flatListRef}
         data={posts}
         renderItem={renderPost}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
