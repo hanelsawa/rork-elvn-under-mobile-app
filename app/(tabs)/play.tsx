@@ -11,7 +11,7 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
-import { Trophy, TrendingUp, Search, MapPin, X, ChevronRight, Check, Minus, Plus, Users, UserPlus } from 'lucide-react-native';
+import { Trophy, TrendingUp, Search, MapPin, X, ChevronRight, Check, Minus, Plus, Users, UserPlus, UserCheck } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,6 +20,8 @@ import type { GolfCourse, HoleScore } from '@/mocks/golf';
 import { courseService, type VicCourse } from '@/lib/courseService';
 import { router, useFocusEffect } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
+import { useFirebase } from '@/contexts/FirebaseContext';
+import { friends as mockFriends } from '@/mocks/friends';
 import { calculateHoleScore, calculateSplit } from '@/lib/scoring';
 
 type Player = {
@@ -27,6 +29,7 @@ type Player = {
   name: string;
   avatar?: string;
   isGuest: boolean;
+  userId?: string;
 };
 
 type ExtendedHoleScore = HoleScore & {
@@ -62,6 +65,9 @@ export default function PlayScreen() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [guestName, setGuestName] = useState('');
   const [submitButtonLayout, setSubmitButtonLayout] = useState({ x: 0, y: 0 });
+  const [showFriendsModal, setShowFriendsModal] = useState(false);
+  const [friendSearchQuery, setFriendSearchQuery] = useState('');
+  const { firebaseUser } = useFirebase();
   const [vicCourse, setVicCourse] = useState<VicCourse | null>(null);
   const [selectedTee, setSelectedTee] = useState<string>('');
 
@@ -208,10 +214,26 @@ export default function PlayScreen() {
       name: user.name,
       avatar: user.avatar,
       isGuest: false,
+      userId: firebaseUser?.uid,
     };
     if (!players.find(p => p.id === user.id)) {
       setPlayers([currentPlayer, ...players]);
     }
+  };
+
+  const addFriend = (friendId: string) => {
+    const friend = mockFriends.find(f => f.id === friendId);
+    if (friend && !players.find(p => p.id === friendId)) {
+      const friendPlayer: Player = {
+        id: friendId,
+        name: friend.name,
+        avatar: friend.avatar,
+        isGuest: false,
+        userId: friendId,
+      };
+      setPlayers([...players, friendPlayer]);
+    }
+    setShowFriendsModal(false);
   };
 
   const addGuest = () => {
@@ -718,9 +740,23 @@ export default function PlayScreen() {
               style={styles.addPlayerButton}
               onPress={addCurrentUser}
             >
-              <Users size={20} color={Colors.accent} />
+              <Users size={20} color={Colors.gold} />
               <Text style={styles.addPlayerText}>Add Me</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addFriendButton}
+              onPress={() => setShowFriendsModal(true)}
+            >
+              <UserCheck size={20} color={Colors.gold} />
+              <Text style={styles.addPlayerText}>Add Friend from App</Text>
+            </TouchableOpacity>
+
+            <View style={styles.dividerContainer}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.divider} />
+            </View>
 
             <View style={styles.guestInputContainer}>
               <TextInput
@@ -735,7 +771,7 @@ export default function PlayScreen() {
                 onPress={addGuest}
                 disabled={!guestName.trim()}
               >
-                <UserPlus size={20} color={guestName.trim() ? Colors.accent : Colors.textSecondary} />
+                <UserPlus size={20} color={guestName.trim() ? Colors.gold : Colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -755,9 +791,11 @@ export default function PlayScreen() {
                     )}
                     <View style={styles.playerItemInfo}>
                       <Text style={styles.playerItemName}>{player.name}</Text>
-                      {player.isGuest && (
+                      {player.isGuest ? (
                         <Text style={styles.playerItemLabel}>Guest</Text>
-                      )}
+                      ) : player.userId ? (
+                        <Text style={styles.playerItemLabelConnected}>Connected Friend</Text>
+                      ) : null}
                     </View>
                     <TouchableOpacity onPress={() => removePlayer(player.id)}>
                       <X size={20} color={Colors.textSecondary} />
@@ -1004,6 +1042,63 @@ export default function PlayScreen() {
               <Text style={styles.submitRoundText}>Submit Round</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showFriendsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Friend</Text>
+            <TouchableOpacity onPress={() => setShowFriendsModal(false)}>
+              <X size={24} color={Colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.searchContainer}>
+            <Search size={20} color={Colors.textSecondary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search friends..."
+              placeholderTextColor={Colors.textSecondary}
+              value={friendSearchQuery}
+              onChangeText={setFriendSearchQuery}
+            />
+          </View>
+
+          <FlatList
+            data={mockFriends.filter(f => 
+              !players.find(p => p.id === f.id) &&
+              (f.name.toLowerCase().includes(friendSearchQuery.toLowerCase()) ||
+               f.username.toLowerCase().includes(friendSearchQuery.toLowerCase()))
+            )}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.friendSelectItem}
+                onPress={() => addFriend(item.id)}
+              >
+                <Image source={{ uri: item.avatar }} style={styles.friendAvatar} />
+                <View style={styles.friendItemInfo}>
+                  <Text style={styles.friendItemName}>{item.name}</Text>
+                  <Text style={styles.friendItemUsername}>{item.username}</Text>
+                </View>
+                <UserCheck size={20} color={Colors.gold} />
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyFriendsList}>
+                <Text style={styles.emptyFriendsText}>
+                  {friendSearchQuery ? 'No friends found' : 'All friends already added'}
+                </Text>
+              </View>
+            }
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.friendsListContent}
+          />
         </View>
       </Modal>
     </View>
@@ -1808,5 +1903,81 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.navy,
+  },
+  addFriendButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: Colors.cardBackground,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: Colors.gold,
+    marginBottom: 16,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  playerItemLabelConnected: {
+    fontSize: 13,
+    color: Colors.gold,
+    marginTop: 2,
+  },
+  friendSelectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  friendAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: Colors.gold,
+  },
+  friendItemInfo: {
+    flex: 1,
+  },
+  friendItemName: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.textPrimary,
+    marginBottom: 2,
+  },
+  friendItemUsername: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  emptyFriendsList: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyFriendsText: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  friendsListContent: {
+    paddingBottom: 20,
   },
 });
