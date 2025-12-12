@@ -88,7 +88,8 @@ export default function PostDetailScreen() {
       <View style={styles.container}>
         <KeyboardAvoidingView
           style={styles.keyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'position' : undefined}
+          keyboardVerticalOffset={0}
         >
           <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
             <Text style={styles.headerTitle}>Post</Text>
