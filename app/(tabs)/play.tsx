@@ -11,7 +11,7 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
-import { Trophy, TrendingUp, Search, MapPin, X, ChevronRight, Check, Minus, Plus, Users, UserPlus, UserCheck } from 'lucide-react-native';
+import { Trophy, TrendingUp, Search, MapPin, X, ChevronRight, Minus, Plus, UserPlus, UserCheck } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -198,6 +198,7 @@ export default function PlayScreen() {
     if (holes === 9) {
       setShowNineHoleType(true);
     } else {
+      addCurrentUser();
       setShowPlayerSelection(true);
     }
   };
@@ -205,6 +206,7 @@ export default function PlayScreen() {
   const handleNineHoleTypeSelection = (type: 'front' | 'back') => {
     setNineHoleType(type);
     setShowNineHoleType(false);
+    addCurrentUser();
     setShowPlayerSelection(true);
   };
 
@@ -253,10 +255,6 @@ export default function PlayScreen() {
   };
 
   const startRound = () => {
-    if (players.length === 0) {
-      addCurrentUser();
-    }
-
     setShowPlayerSelection(false);
 
     // ✅ If a VIC course + tee is selected, use that for the round
@@ -737,19 +735,11 @@ export default function PlayScreen() {
 
           <ScrollView style={styles.playerSelectionContent}>
             <TouchableOpacity
-              style={styles.addPlayerButton}
-              onPress={addCurrentUser}
-            >
-              <Users size={20} color={Colors.gold} />
-              <Text style={styles.addPlayerText}>Add Me</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
               style={styles.addFriendButton}
               onPress={() => setShowFriendsModal(true)}
             >
               <UserCheck size={20} color={Colors.gold} />
-              <Text style={styles.addPlayerText}>Add Friend from App</Text>
+              <Text style={styles.addPlayerText}>Add Friend</Text>
             </TouchableOpacity>
 
             <View style={styles.dividerContainer}>
