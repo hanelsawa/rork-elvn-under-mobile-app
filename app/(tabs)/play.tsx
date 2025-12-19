@@ -36,6 +36,8 @@ type ExtendedHoleScore = HoleScore & {
   strokeIndex?: number;
 };
 
+type ScoringType = 'stableford' | 'strokePlay';
+
 type SavedRound = {
   course: GolfCourse;
   holeScores: ExtendedHoleScore[];
@@ -45,6 +47,7 @@ type SavedRound = {
   vicCourse?: VicCourse;
   selectedTee?: string;
   handicap?: number;
+  scoringType?: ScoringType;
 };
 
 export default function PlayScreen() {
@@ -56,12 +59,10 @@ export default function PlayScreen() {
   const [showHoleTracker, setShowHoleTracker] = useState(false);
   const [holeScores, setHoleScores] = useState<ExtendedHoleScore[]>([]);
   const [handicap, setHandicap] = useState<number>(0);
-  const [showHandicapInput, setShowHandicapInput] = useState(false);
-  const [showHoleSelection, setShowHoleSelection] = useState(false);
   const [totalHoles, setTotalHoles] = useState<9 | 18>(18);
-  const [nineHoleType, setNineHoleType] = useState<'front' | 'back'>('front');
-  const [showNineHoleType, setShowNineHoleType] = useState(false);
   const [showPlayerSelection, setShowPlayerSelection] = useState(false);
+  const [showRoundSettings, setShowRoundSettings] = useState(false);
+  const [scoringType, setScoringType] = useState<ScoringType>('stableford');
   const [players, setPlayers] = useState<Player[]>([]);
   const [guestName, setGuestName] = useState('');
   const [submitButtonLayout, setSubmitButtonLayout] = useState({ x: 0, y: 0 });
@@ -75,6 +76,19 @@ export default function PlayScreen() {
     loadSavedRound();
   }, []);
 
+  const addCurrentUser = useCallback(() => {
+    const currentPlayer: Player = {
+      id: user.id,
+      name: user.name,
+      avatar: user.avatar,
+      isGuest: false,
+      userId: firebaseUser?.uid,
+    };
+    if (!players.find(p => p.id === user.id)) {
+      setPlayers(prev => [currentPlayer, ...prev]);
+    }
+  }, [user, firebaseUser, players]);
+
   const checkForSelectedCourse = useCallback(() => {
     async function checkCourse() {
       try {
@@ -87,7 +101,8 @@ export default function PlayScreen() {
             await courseService.clearLastUsedCourse();
 
             if (!selectedCourse) {
-              setShowHoleSelection(true);
+              addCurrentUser();
+              setShowPlayerSelection(true);
             }
           }
         }
@@ -96,7 +111,7 @@ export default function PlayScreen() {
       }
     }
     checkCourse();
-  }, [selectedCourse]);
+  }, [selectedCourse, addCurrentUser]);
 
   useFocusEffect(checkForSelectedCourse);
 
@@ -131,6 +146,7 @@ export default function PlayScreen() {
                 setPlayers(round.players);
                 setTotalHoles(round.totalHoles);
                 setHandicap(round.handicap || 0);
+                setScoringType(round.scoringType || 'stableford');
                 if (round.vicCourse) {
                   setVicCourse(round.vicCourse);
                   setSelectedTee(round.selectedTee || '');
@@ -158,6 +174,7 @@ export default function PlayScreen() {
         vicCourse: vicCourse || undefined,
         selectedTee: selectedTee || undefined,
         handicap,
+        scoringType,
       };
       await AsyncStorage.setItem('currentRound', JSON.stringify(round));
     } catch (error) {
@@ -189,38 +206,8 @@ export default function PlayScreen() {
   const handleSelectCourse = (course: GolfCourse) => {
     setSelectedCourse(course);
     setShowCourseSelector(false);
-    setShowHoleSelection(true);
-  };
-
-  const handleHoleSelection = (holes: 9 | 18) => {
-    setTotalHoles(holes);
-    setShowHoleSelection(false);
-    if (holes === 9) {
-      setShowNineHoleType(true);
-    } else {
-      addCurrentUser();
-      setShowPlayerSelection(true);
-    }
-  };
-
-  const handleNineHoleTypeSelection = (type: 'front' | 'back') => {
-    setNineHoleType(type);
-    setShowNineHoleType(false);
     addCurrentUser();
     setShowPlayerSelection(true);
-  };
-
-  const addCurrentUser = () => {
-    const currentPlayer: Player = {
-      id: user.id,
-      name: user.name,
-      avatar: user.avatar,
-      isGuest: false,
-      userId: firebaseUser?.uid,
-    };
-    if (!players.find(p => p.id === user.id)) {
-      setPlayers([currentPlayer, ...players]);
-    }
   };
 
   const addFriend = (friendId: string) => {
@@ -256,8 +243,12 @@ export default function PlayScreen() {
 
   const startRound = () => {
     setShowPlayerSelection(false);
+    setShowRoundSettings(true);
+  };
 
-    // ✅ If a VIC course + tee is selected, use that for the round
+  const confirmRoundSettings = () => {
+    setShowRoundSettings(false);
+
     if (vicCourse && selectedTee) {
       const totalPar = courseService.getTotalPar(vicCourse, selectedTee);
 
@@ -272,31 +263,25 @@ export default function PlayScreen() {
         image: '',
       };
 
-      // keep selectedCourse in sync so saving/resuming still works
       setSelectedCourse(courseStub);
       initializeHoleScores(courseStub);
       return;
     }
 
-    // 🟢 Fallback: existing behaviour for mock courses
     if (selectedCourse) {
       initializeHoleScores(selectedCourse);
     }
   };
 
   const initializeHoleScores = (course: GolfCourse) => {
-    const actualHoles = totalHoles;
     const scores: ExtendedHoleScore[] = [];
-    const startHole = totalHoles === 9 && nineHoleType === 'back' ? 10 : 1;
 
     if (vicCourse && selectedTee) {
       const tee = courseService.getTee(vicCourse, selectedTee);
       const pars = tee?.par || [];
       const strokeIndexes = tee?.strokeIndex || [];
-      const startIndex = totalHoles === 9 && nineHoleType === 'back' ? 9 : 0;
-      const endIndex = totalHoles === 9 ? startIndex + 9 : 18;
 
-      for (let i = startIndex; i < endIndex; i++) {
+      for (let i = 0; i < 18; i++) {
         scores.push({
           hole: i + 1,
           par: pars[i] || 4,
@@ -305,12 +290,12 @@ export default function PlayScreen() {
         });
       }
     } else {
-      const parPerHole = Math.floor(course.par / actualHoles);
-      const remainder = course.par % actualHoles;
+      const parPerHole = Math.floor(course.par / 18);
+      const remainder = course.par % 18;
 
-      for (let i = 0; i < actualHoles; i++) {
+      for (let i = 0; i < 18; i++) {
         scores.push({
-          hole: startHole + i,
+          hole: i + 1,
           par: i < remainder ? parPerHole + 1 : parPerHole,
           score: 0,
         });
@@ -426,6 +411,7 @@ export default function PlayScreen() {
               setSelectedCourse(null);
               setPlayers([]);
               setTotalHoles(18);
+              setScoringType('stableford');
             },
           },
         ],
@@ -576,13 +562,16 @@ export default function PlayScreen() {
             <View style={styles.scorecardContainer}>
               <TouchableOpacity
                 style={styles.startRoundButton}
-                onPress={() => setShowHoleSelection(true)}
+                onPress={() => {
+                  addCurrentUser();
+                  setShowPlayerSelection(true);
+                }}
               >
                 <View style={styles.startRoundContent}>
                   <View>
                     <Text style={styles.startRoundTitle}>Start New Round</Text>
                     <Text style={styles.startRoundSubtitle}>
-                      Select holes and add players
+                      Add players and configure settings
                     </Text>
                   </View>
                   <ChevronRight size={24} color={Colors.white} />
@@ -651,71 +640,95 @@ export default function PlayScreen() {
       </Modal>
 
       <Modal
-        visible={showHoleSelection}
+        visible={showRoundSettings}
         animationType="slide"
         presentationStyle="pageSheet"
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Holes</Text>
-            <TouchableOpacity onPress={() => setShowHoleSelection(false)}>
+            <Text style={styles.modalTitle}>Round Settings</Text>
+            <TouchableOpacity onPress={() => setShowRoundSettings(false)}>
               <X size={24} color={Colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.holeSelectionContainer}>
-            <Text style={styles.holeSelectionTitle}>How many holes?</Text>
-            <View style={styles.holeOptions}>
-              <TouchableOpacity
-                style={styles.holeOption}
-                onPress={() => handleHoleSelection(9)}
-              >
-                <Text style={styles.holeOptionNumber}>9</Text>
-                <Text style={styles.holeOptionLabel}>Holes</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.holeOption}
-                onPress={() => handleHoleSelection(18)}
-              >
-                <Text style={styles.holeOptionNumber}>18</Text>
-                <Text style={styles.holeOptionLabel}>Holes</Text>
-              </TouchableOpacity>
+          <ScrollView style={styles.settingsContent}>
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>Course Preview</Text>
+              <View style={styles.coursePreviewCard}>
+                <Text style={styles.coursePreviewName}>
+                  {vicCourse ? vicCourse.club : selectedCourse?.name}
+                </Text>
+                <Text style={styles.coursePreviewLocation}>
+                  {vicCourse ? `${vicCourse.suburb}, ${vicCourse.state}` : `${selectedCourse?.location}, ${selectedCourse?.state}`}
+                </Text>
+                <View style={styles.coursePreviewStats}>
+                  <View style={styles.coursePreviewStat}>
+                    <Text style={styles.coursePreviewStatLabel}>Holes</Text>
+                    <Text style={styles.coursePreviewStatValue}>18</Text>
+                  </View>
+                  <View style={styles.coursePreviewStat}>
+                    <Text style={styles.coursePreviewStatLabel}>Par</Text>
+                    <Text style={styles.coursePreviewStatValue}>
+                      {vicCourse && selectedTee ? courseService.getTotalPar(vicCourse, selectedTee) : selectedCourse?.par}
+                    </Text>
+                  </View>
+                  <View style={styles.coursePreviewStat}>
+                    <Text style={styles.coursePreviewStatLabel}>Players</Text>
+                    <Text style={styles.coursePreviewStatValue}>{players.length}</Text>
+                  </View>
+                </View>
+              </View>
             </View>
-          </View>
-        </View>
-      </Modal>
 
-      <Modal
-        visible={showNineHoleType}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select 9 Holes</Text>
-            <TouchableOpacity onPress={() => setShowNineHoleType(false)}>
-              <X size={24} color={Colors.textPrimary} />
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>Scoring Type</Text>
+              <View style={styles.scoringTypeOptions}>
+                <TouchableOpacity
+                  style={[
+                    styles.scoringTypeOption,
+                    scoringType === 'stableford' && styles.scoringTypeOptionActive,
+                  ]}
+                  onPress={() => setScoringType('stableford')}
+                >
+                  <Text
+                    style={[
+                      styles.scoringTypeOptionText,
+                      scoringType === 'stableford' && styles.scoringTypeOptionTextActive,
+                    ]}
+                  >
+                    Stableford
+                  </Text>
+                  <Text style={styles.scoringTypeOptionDesc}>Points-based scoring</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.scoringTypeOption,
+                    scoringType === 'strokePlay' && styles.scoringTypeOptionActive,
+                  ]}
+                  onPress={() => setScoringType('strokePlay')}
+                >
+                  <Text
+                    style={[
+                      styles.scoringTypeOptionText,
+                      scoringType === 'strokePlay' && styles.scoringTypeOptionTextActive,
+                    ]}
+                  >
+                    Stroke Play
+                  </Text>
+                  <Text style={styles.scoringTypeOptionDesc}>Traditional stroke count</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.settingsFooter}>
+            <TouchableOpacity
+              style={styles.startRoundButtonModal}
+              onPress={confirmRoundSettings}
+            >
+              <Text style={styles.startRoundButtonText}>Start Round</Text>
             </TouchableOpacity>
-          </View>
-
-          <View style={styles.holeSelectionContainer}>
-            <Text style={styles.holeSelectionTitle}>Which 9 holes?</Text>
-            <View style={styles.holeOptions}>
-              <TouchableOpacity
-                style={styles.holeOption}
-                onPress={() => handleNineHoleTypeSelection('front')}
-              >
-                <Text style={styles.holeOptionNumber}>Front</Text>
-                <Text style={styles.holeOptionLabel}>Holes 1-9</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.holeOption}
-                onPress={() => handleNineHoleTypeSelection('back')}
-              >
-                <Text style={styles.holeOptionNumber}>Back</Text>
-                <Text style={styles.holeOptionLabel}>Holes 10-18</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
@@ -839,7 +852,7 @@ export default function PlayScreen() {
               </Text>
               <Text style={styles.trackerCourseDetails}>
                 {vicCourse && selectedTee ? `${selectedTee} • ` : ''}
-                {totalHoles === 9 ? `${nineHoleType === 'front' ? 'Front' : 'Back'} 9` : '18 holes'} • {players.length} player{players.length !== 1 ? 's' : ''}
+                18 holes • {scoringType === 'stableford' ? 'Stableford' : 'Stroke Play'} • {players.length} player{players.length !== 1 ? 's' : ''}
               </Text>
             </View>
             <TouchableOpacity
@@ -889,20 +902,22 @@ export default function PlayScreen() {
               </Text>
             </View>
             <View style={styles.scoreOverviewDivider} />
-            <View style={styles.scoreOverviewItem}>
-              <Text style={styles.scoreOverviewLabel}>Stableford</Text>
-              <Text style={[styles.scoreOverviewValue, { color: Colors.gold }]}>
-                {(() => {
-                  const holesData = holeScores.map(h => ({
-                    par: h.par,
-                    gross: h.score,
-                    strokeIndex: h.strokeIndex || 1,
-                  }));
-                  const totals = calculateSplit(holesData, handicap);
-                  return totals.total.pointsTotal;
-                })()}
-              </Text>
-            </View>
+            {scoringType === 'stableford' && (
+              <View style={styles.scoreOverviewItem}>
+                <Text style={styles.scoreOverviewLabel}>Points</Text>
+                <Text style={[styles.scoreOverviewValue, { color: Colors.gold }]}>
+                  {(() => {
+                    const holesData = holeScores.map(h => ({
+                      par: h.par,
+                      gross: h.score,
+                      strokeIndex: h.strokeIndex || 1,
+                    }));
+                    const totals = calculateSplit(holesData, handicap);
+                    return totals.total.pointsTotal;
+                  })()}
+                </Text>
+              </View>
+            )}
           </View>
 
           <ScrollView
@@ -916,7 +931,6 @@ export default function PlayScreen() {
                 strokeIndex: hole.strokeIndex || 1,
                 handicap,
               });
-              const scoreToPar = hole.score > 0 ? hole.score - hole.par : 0;
               return (
                 <View key={hole.hole} style={styles.holeCard}>
                   <View style={styles.holeHeader}>
@@ -929,7 +943,7 @@ export default function PlayScreen() {
                         </View>
                       )}
                     </View>
-                    {hole.score > 0 && calc.points > 0 && (
+                    {scoringType === 'stableford' && hole.score > 0 && calc.points > 0 && (
                       <View
                         style={[
                           styles.holeStatusBadge,
@@ -957,26 +971,9 @@ export default function PlayScreen() {
                             color={hole.score === 0 ? Colors.border : Colors.gold}
                           />
                         </TouchableOpacity>
-                        <TextInput
-                          style={styles.scoreInputField}
-                          value={hole.score === 0 ? '' : String(hole.score)}
-                          onChangeText={(text) => {
-                            if (text === '') {
-                              updateHoleScore(index, 0);
-                              return;
-                            }
-                            const num = parseInt(text, 10);
-                            if (!isNaN(num) && num >= 0 && num <= 15) {
-                              updateHoleScore(index, num);
-                            }
-                          }}
-                          keyboardType="number-pad"
-                          placeholder="-"
-                          placeholderTextColor={Colors.textSecondary}
-                          maxLength={2}
-                          returnKeyType="done"
-                          editable={true}
-                        />
+                        <Text style={styles.scoreDisplayText}>
+                          {hole.score === 0 ? '-' : hole.score}
+                        </Text>
                         <TouchableOpacity
                           style={styles.scoreButtonSmall}
                           onPress={() => updateHoleScore(index, hole.score + 1)}
@@ -986,25 +983,23 @@ export default function PlayScreen() {
                       </View>
                     </View>
 
-                    {hole.strokeIndex && (
-                      <>
-                        <View style={styles.scoreCell}>
-                          <Text style={styles.scoreCellLabel}>Net</Text>
-                          <Text style={[styles.scoreValue, calc.net > 0 && styles.underPar]}>
-                            {calc.net > 0 ? calc.net : '-'}
-                          </Text>
-                          {calc.shots > 0 && hole.score > 0 && (
-                            <Text style={styles.shotsText}>({calc.shots} shot{calc.shots > 1 ? 's' : ''})</Text>
-                          )}
-                        </View>
+                    <View style={styles.scoreCell}>
+                      <Text style={styles.scoreCellLabel}>Net</Text>
+                      <Text style={[styles.scoreValue, calc.net > 0 && styles.underPar]}>
+                        {calc.net > 0 ? calc.net : '-'}
+                      </Text>
+                      {calc.shots > 0 && hole.score > 0 && (
+                        <Text style={styles.shotsText}>({calc.shots} shot{calc.shots > 1 ? 's' : ''})</Text>
+                      )}
+                    </View>
 
-                        <View style={styles.scoreCell}>
-                          <Text style={styles.scoreCellLabel}>Points</Text>
-                          <Text style={[styles.scoreValue, { color: Colors.gold }]}>
-                            {calc.points > 0 ? calc.points : '-'}
-                          </Text>
-                        </View>
-                      </>
+                    {scoringType === 'stableford' && (
+                      <View style={styles.scoreCell}>
+                        <Text style={styles.scoreCellLabel}>Points</Text>
+                        <Text style={[styles.scoreValue, { color: Colors.gold }]}>
+                          {calc.points > 0 ? calc.points : '-'}
+                        </Text>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -1969,5 +1964,96 @@ const styles = StyleSheet.create({
   },
   friendsListContent: {
     paddingBottom: 20,
+  },
+  settingsContent: {
+    flex: 1,
+  },
+  settingsSection: {
+    padding: 16,
+  },
+  settingsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: Colors.textPrimary,
+    marginBottom: 16,
+  },
+  coursePreviewCard: {
+    backgroundColor: Colors.cardBackground,
+    padding: 20,
+    borderRadius: 16,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  coursePreviewName: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  coursePreviewLocation: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 20,
+  },
+  coursePreviewStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  coursePreviewStat: {
+    alignItems: 'center',
+  },
+  coursePreviewStatLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+    fontWeight: '600' as const,
+  },
+  coursePreviewStatValue: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: Colors.gold,
+  },
+  scoringTypeOptions: {
+    gap: 12,
+  },
+  scoringTypeOption: {
+    backgroundColor: Colors.cardBackground,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: Colors.border,
+  },
+  scoringTypeOptionActive: {
+    borderColor: Colors.gold,
+    backgroundColor: Colors.gold + '10',
+  },
+  scoringTypeOptionText: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  scoringTypeOptionTextActive: {
+    color: Colors.gold,
+  },
+  scoringTypeOptionDesc: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  settingsFooter: {
+    padding: 16,
+    backgroundColor: Colors.cardBackground,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  scoreDisplayText: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: Colors.textPrimary,
+    minWidth: 60,
+    textAlign: 'center',
   },
 });
