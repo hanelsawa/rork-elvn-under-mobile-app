@@ -85,12 +85,12 @@ export default function PostDetailScreen() {
           presentation: 'modal',
         }}
       />
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
-        <View style={styles.content}>
+      <View style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.keyboardView}
+          behavior={Platform.OS === 'ios' ? 'position' : undefined}
+          keyboardVerticalOffset={0}
+        >
           <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
             <Text style={styles.headerTitle}>Post</Text>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
@@ -100,10 +100,8 @@ export default function PostDetailScreen() {
 
           <ScrollView
             style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             bounces={true}
-            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.authorSection}>
               <Image
@@ -215,8 +213,8 @@ export default function PostDetailScreen() {
               />
             </TouchableOpacity>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </View>
     </>
   );
 }
@@ -226,7 +224,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  content: {
+  keyboardView: {
     flex: 1,
   },
   header: {
@@ -251,9 +249,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 20,
   },
   authorSection: {
     flexDirection: 'row',
